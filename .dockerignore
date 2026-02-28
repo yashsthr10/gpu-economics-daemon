@@ -1,0 +1,43 @@
+# Git and version control
+.git
+.gitignore
+.gitattributes
+
+# Documentation and plans (not needed in image)
+docs/
+*.md
+!deploy/README.md
+
+# IDE and OS
+.idea
+.vscode
+.DS_Store
+
+# Test and scripts (agent binary is built from cmd/agent only)
+*_test.go
+scripts/
+*.test
+coverage.*
+
+# Build artifacts from host
+gpu-econ-agent
+extract_gpu_snapshot
+/bin
+/dist
+
+# Local config and secrets
+*.local.yaml
+.env
+.env.*
+*.pem
+
+# Cursor and project metadata
+.cursorrules
+.cursor
+*.plan.md
+
+# Misc
+tmp
+temp
+*.log
+gpu_snapshot.json

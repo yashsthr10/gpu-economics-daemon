@@ -1,0 +1,154 @@
+You are working inside a production-grade Go repository.
+
+Follow these architectural and engineering rules strictly.
+
+------------------------------------------------------------
+ARCHITECTURE PRINCIPLES
+------------------------------------------------------------
+
+1. Follow Clean Architecture (Hexagonal / Ports & Adapters).
+
+Dependency direction must always flow inward:
+
+handler → service → domain
+            ↓
+        repository (interface)
+            ↓
+     infrastructure (implementation)
+
+Domain must NEVER depend on:
+- HTTP frameworks
+- Database drivers
+- Redis
+- Kafka
+- External services
+- Logging frameworks
+
+Domain must contain only:
+- Entities
+- Value objects
+- Business rules
+- Interfaces (ports)
+
+------------------------------------------------------------
+PROJECT STRUCTURE RULES
+------------------------------------------------------------
+
+- cmd/ contains entry points only.
+- internal/domain contains pure business logic.
+- internal/service contains application use cases.
+- internal/repository contains repository interfaces.
+- internal/infrastructure contains external implementations.
+- internal/handler contains transport layer logic (HTTP, gRPC, etc).
+
+Do not move business logic into handler or infrastructure layers.
+
+------------------------------------------------------------
+DEPENDENCY INJECTION
+------------------------------------------------------------
+
+- Use constructor injection.
+- Do not use global variables.
+- Do not use hidden singletons.
+- All dependencies must be explicit.
+
+Example:
+    func NewUserService(repo UserRepository) *UserService
+
+------------------------------------------------------------
+CONTEXT USAGE
+------------------------------------------------------------
+
+- Any function that touches:
+    - network
+    - database
+    - filesystem
+    - external service
+must accept context.Context as the first parameter.
+
+Never create background contexts inside business logic.
+
+------------------------------------------------------------
+INTERFACES
+------------------------------------------------------------
+
+- Define interfaces at the consumer side.
+- Keep interfaces small and focused.
+- Do not create “god interfaces”.
+
+------------------------------------------------------------
+ERROR HANDLING
+------------------------------------------------------------
+
+- Always wrap errors with context.
+- Do not ignore errors.
+- Do not panic in business logic.
+- Panic only during startup failures.
+
+------------------------------------------------------------
+LOGGING
+------------------------------------------------------------
+
+- Use structured logging.
+- Do not log inside domain layer.
+- Logging belongs to infrastructure or handler layers.
+- Do not use fmt.Println in production code.
+
+------------------------------------------------------------
+TESTING
+------------------------------------------------------------
+
+- Write unit tests alongside code.
+- Mock via interfaces only.
+- Do not mock concrete types.
+- No real DB calls in unit tests.
+
+------------------------------------------------------------
+CONCURRENCY
+------------------------------------------------------------
+
+- Never start goroutines without clear lifecycle control.
+- Respect context cancellation.
+- Avoid shared mutable state.
+- Prefer channels for coordination.
+- Use sync primitives carefully.
+
+------------------------------------------------------------
+CONFIGURATION
+------------------------------------------------------------
+
+- All configuration must come from environment variables or config files.
+- Validate config at startup.
+- Fail fast if configuration is invalid.
+
+------------------------------------------------------------
+GENERAL CODE RULES
+------------------------------------------------------------
+
+- Keep packages small and focused.
+- No circular dependencies.
+- Avoid files larger than 300 lines.
+- Keep functions short and readable.
+- Prefer explicit over clever.
+- Avoid premature abstraction.
+- No utility dumping ground packages.
+
+------------------------------------------------------------
+PERFORMANCE & SAFETY
+------------------------------------------------------------
+
+- Avoid unnecessary allocations.
+- Pass large structs by pointer.
+- Do not expose internal state.
+- Validate all external inputs at handler layer.
+
+------------------------------------------------------------
+FINAL PRINCIPLE
+------------------------------------------------------------
+
+Clarity > Cleverness.
+Explicit > Magic.
+Maintainability > Short-term speed.
+
+This is production infrastructure code.
+Act accordingly.

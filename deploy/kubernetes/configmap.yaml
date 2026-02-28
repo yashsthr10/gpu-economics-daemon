@@ -1,0 +1,20 @@
+# ConfigMap for GPU Economic Telemetry Agent. Apply to the same namespace as the DaemonSet.
+# When node_id is "auto", the agent uses NODE_NAME (from downward API) or hostname.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gpu-econ-agent-config
+  namespace: monitoring
+data:
+  config.yaml: |
+    cluster_id: research-cluster-01
+    node_id: auto
+    collection_interval_seconds: 5
+    otel:
+      endpoint: "otel-collector.monitoring.svc.cluster.local:4317"
+      insecure: false
+    cost:
+      electricity_cost_per_kwh: 0.12
+      pue: 1.4
+    process_attribution:
+      enabled: false

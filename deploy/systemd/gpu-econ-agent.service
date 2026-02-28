@@ -1,0 +1,19 @@
+# systemd unit for GPU Economic Telemetry Agent (bare-metal).
+# Install: copy to /etc/systemd/system/ and run systemctl daemon-reload, systemctl enable --now gpu-econ-agent
+# Ensure /etc/gpu-econ-agent/config.yaml exists and binary is at /usr/local/bin/gpu-econ-agent.
+
+[Unit]
+Description=GPU Economic Telemetry Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/gpu-econ-agent -config /etc/gpu-econ-agent/config.yaml
+Restart=on-failure
+RestartSec=10
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,66 @@
+# Binaries
+gpu-econ-agent
+extract_gpu_snapshot
+ingestion
+demo/ingestion/ingestion
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build output
+/bin/
+/dist/
+/build/
+
+# Test and coverage
+*.test
+*.out
+coverage.html
+coverage.txt
+*.cover
+.coverage
+
+# Go workspace and modules
+go.work
+go.work.sum
+vendor/
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local config and secrets (do not commit)
+*.local.yaml
+*.local.yml
+.env
+.env.local
+*.pem
+!deploy/**/*.pem
+
+# Snapshot and debug output (optional; remove if you want to track)
+gpu_snapshot.json
+otel_ingestion.json
+otel_ingestion.jsonl
+*.log
+
+# Demo frontend
+demo/frontend/node_modules/
+demo/frontend/dist/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp

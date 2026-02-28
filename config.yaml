@@ -1,0 +1,24 @@
+# GPU Economic Telemetry Agent — configuration
+# See docs/DEPLOYMENT.md and internal/config for full schema.
+
+# Required: cluster and node identity
+cluster_id: "my-cluster"
+node_id: "auto"  # "auto" = hostname, or set NODE_NAME in Kubernetes
+
+# Poll interval in seconds (1–300)
+collection_interval_seconds: 5
+
+# OTLP gRPC export
+otel:
+  endpoint: "localhost:4317"
+  insecure: true  # use true for local demo ingestion; false with tls_cert_path for production
+  # tls_cert_path: "/etc/gpu-econ-agent/certs/ca.pem"
+
+# Cost engine: PUE and electricity rate
+cost:
+  electricity_cost_per_kwh: 0.12
+  pue: 1.4
+
+# Optional: process-to-GPU attribution (v1: stub, no-op)
+process_attribution:
+  enabled: false
