@@ -36,7 +36,7 @@ export default function FileUpload({ onFile, fileName }) {
       {fileName ? (
         <span className="upload-name">{fileName}</span>
       ) : (
-        <span className="upload-placeholder">Drop otel_ingestion.jsonl here or click to browse</span>
+        <span className="upload-placeholder">Drop OTLP or flat JSONL (e.g. otel_ingestion.jsonl) here or click to browse</span>
       )}
     </div>
   )

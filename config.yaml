@@ -14,10 +14,11 @@ otel:
   insecure: true  # use true for local demo ingestion; false with tls_cert_path for production
   # tls_cert_path: "/etc/gpu-econ-agent/certs/ca.pem"
 
-# Cost engine: PUE and electricity rate
+# Cost engine: PUE, electricity rate, and idle classification (util below threshold = idle energy)
 cost:
   electricity_cost_per_kwh: 0.12
   pue: 1.4
+  idle_utilization_threshold_percent: 10  # 1-100; default 10
 
 # Optional: process-to-GPU attribution (v1: stub, no-op)
 process_attribution:

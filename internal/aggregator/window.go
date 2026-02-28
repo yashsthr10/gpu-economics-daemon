@@ -11,23 +11,32 @@ import (
 const joulesPerKWh = 3_600_000 // Watt-seconds per kWh
 
 // gpuState holds per-GPU aggregation state (Riemann sum: P_prev, E_total, last time).
+// EIdleTotal and EActiveTotal split energy by utilization threshold for economic insight.
 type gpuState struct {
-	PPrev   float64
-	ETotal  float64 // Watt-seconds (Joules)
-	LastAt  time.Time
-	Current models.GPUSample // Latest gauges for export
+	PPrev       float64
+	ETotal      float64 // Watt-seconds (Joules), sum of idle + active
+	EIdleTotal  float64 // Watt-seconds when util < threshold
+	EActiveTotal float64 // Watt-seconds when util >= threshold
+	LastAt      time.Time
+	Current     models.GPUSample // Latest gauges for export
 }
 
 // State holds all GPU state and the latest full snapshot for gauge export.
+// IdleThresholdPct: utilization below this is classified as idle (default 10).
 type State struct {
-	mu     sync.RWMutex
-	byGPU  map[int]*gpuState
-	latest models.NodeSample // Latest NodeSample for current gauges
+	mu               sync.RWMutex
+	byGPU            map[int]*gpuState
+	latest           models.NodeSample
+	IdleThresholdPct float64 // 1-100; util < this -> idle energy
 }
 
-// NewState returns an empty State.
-func NewState() *State {
-	return &State{byGPU: make(map[int]*gpuState)}
+// NewState returns an empty State with the given idle utilization threshold (1-100).
+// If threshold is 0, defaults to 10.
+func NewState(idleThresholdPct float64) *State {
+	if idleThresholdPct <= 0 || idleThresholdPct > 100 {
+		idleThresholdPct = 10
+	}
+	return &State{byGPU: make(map[int]*gpuState), IdleThresholdPct: idleThresholdPct}
 }
 
 // Update applies one NodeSample: computes E_interval = (P_prev + P_current)/2 * delta_t per GPU,
@@ -61,6 +70,11 @@ func (s *State) Update(sample models.NodeSample) {
 		if deltaT > 0 {
 			eInterval := (gs.PPrev + g.PowerWatts) / 2.0 * deltaT
 			gs.ETotal += eInterval
+			if g.SMUtilPct < s.IdleThresholdPct {
+				gs.EIdleTotal += eInterval
+			} else {
+				gs.EActiveTotal += eInterval
+			}
 		}
 		gs.PPrev = g.PowerWatts
 		gs.LastAt = sample.Timestamp
@@ -69,16 +83,21 @@ func (s *State) Update(sample models.NodeSample) {
 	s.latest = sample
 }
 
-// Snapshot returns a copy of the state suitable for the exporter: current gauges per GPU and E_kWh per GPU.
-func (s *State) Snapshot() (gauges []models.GPUSample, eKWhByGPU map[int]float64) {
+// Snapshot returns a copy of the state suitable for the exporter: current gauges per GPU,
+// total E_kWh per GPU, idle E_kWh per GPU, and active E_kWh per GPU.
+func (s *State) Snapshot() (gauges []models.GPUSample, eKWhByGPU, eKWhIdleByGPU, eKWhActiveByGPU map[int]float64) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	gauges = make([]models.GPUSample, 0, len(s.byGPU))
 	eKWhByGPU = make(map[int]float64)
+	eKWhIdleByGPU = make(map[int]float64)
+	eKWhActiveByGPU = make(map[int]float64)
 	for id, gs := range s.byGPU {
 		gauges = append(gauges, gs.Current)
 		eKWhByGPU[id] = gs.ETotal / joulesPerKWh
+		eKWhIdleByGPU[id] = gs.EIdleTotal / joulesPerKWh
+		eKWhActiveByGPU[id] = gs.EActiveTotal / joulesPerKWh
 	}
-	return gauges, eKWhByGPU
+	return gauges, eKWhByGPU, eKWhIdleByGPU, eKWhActiveByGPU
 }

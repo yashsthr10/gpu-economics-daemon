@@ -120,6 +120,15 @@ So cumulative energy in kWh is: **E_kWh = E_total / 3,600,000**.
 - All power values: **float64**, unit **Watts**.
 - All monetary cost values: **float64**; currency implied by config (e.g., USD); no currency code in v1.
 
+#### 2.2.5 Idle vs Active Energy
+
+Energy is classified per interval by utilization: if SM utilization is below a configurable threshold (`cost.idle_utilization_threshold_percent`, default 10%), the interval energy is counted as **idle**; otherwise as **active**. Both are exported as cumulative counters (`gpu.energy.kwh.idle`, `gpu.energy.kwh.active`) so backends and dashboards can report idle vs active economic insight. Total energy remains `gpu.energy.kwh.total` (sum of both).
+
+#### 2.2.6 Power Validation and Counter Reset
+
+- **Power sanity checks:** The agent evaluates per-GPU readings and exposes anomaly gauges: e.g. suspiciously low power (&lt; 5W for a discrete GPU, e.g. power limit max >= 50W) and NVML reporting power limit zero. These are exposed as `gpu.anomaly.*` gauges (0 or 1) for observability.
+- **Counter reset:** On daemon restart, energy and cost counters reset to zero. The agent emits `agent.restart.count` (value 1 per process start) so backends can detect restarts and avoid misinterpreting counter drops.
+
 ### 2.3 Cost Engine and Full Economic Pipeline
 
 After energy aggregation (E_kWh per GPU or per job), the cost engine applies PUE and electricity rate. The **full economic pipeline** is:

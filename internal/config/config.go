@@ -29,8 +29,9 @@ type OTELConfig struct {
 
 // CostConfig holds cost engine parameters.
 type CostConfig struct {
-	ElectricityCostPerKWh float64 `yaml:"electricity_cost_per_kwh"`
-	PUE                   float64 `yaml:"pue"`
+	ElectricityCostPerKWh           float64 `yaml:"electricity_cost_per_kwh"`
+	PUE                             float64 `yaml:"pue"`
+	IdleUtilizationThresholdPercent float64 `yaml:"idle_utilization_threshold_percent"`
 }
 
 // ProcessAttribution holds optional process attribution settings.
@@ -66,6 +67,9 @@ func applyDefaults(cfg *Config) {
 	if cfg.Cost.PUE == 0 {
 		cfg.Cost.PUE = 1.0
 	}
+	if cfg.Cost.IdleUtilizationThresholdPercent == 0 {
+		cfg.Cost.IdleUtilizationThresholdPercent = 10
+	}
 }
 
 // Validate checks all validation rules (SPECIFICATION.md section 4.3).
@@ -88,6 +92,9 @@ func Validate(cfg *Config) error {
 	}
 	if cfg.Cost.ElectricityCostPerKWh < 0 {
 		return fmt.Errorf("cost.electricity_cost_per_kwh must be >= 0, got %f", cfg.Cost.ElectricityCostPerKWh)
+	}
+	if cfg.Cost.IdleUtilizationThresholdPercent != 0 && (cfg.Cost.IdleUtilizationThresholdPercent < 1 || cfg.Cost.IdleUtilizationThresholdPercent > 100) {
+		return fmt.Errorf("cost.idle_utilization_threshold_percent must be between 1 and 100, got %f", cfg.Cost.IdleUtilizationThresholdPercent)
 	}
 	return nil
 }

@@ -1,9 +1,10 @@
 /**
  * Parses JSONL ingestion output: one JSON object per line.
- * Supports two shapes:
- * - Simple: { "received_at", "type": "metrics", "metrics": [ { "name", "gpu_id", "value", "unit" }, ... ] }
- * - Legacy: { "received_at", "type": "metrics", "data": { "resourceMetrics": [...] } }
- * Extracts GPU metrics for analysis.
+ * Supports:
+ * - OTLP (valid OTel): { "received_at", "type": "metrics", "data": { "resourceMetrics": [ { "resource", "scopeMetrics": [ { "scope", "metrics": [ { "name", "gauge"|"sum", "dataPoints": [{ "attributes", "asDouble"|"asInt" }] } ] } ] } ] } }
+ *   (resourceMetrics -> scopeMetrics -> metrics -> gauge/sum -> dataPoints; camelCase from protojson)
+ * - Flat/simple: { "received_at", "type": "metrics", "metrics": [ { "name", "gpu_id", "value", "unit" }, ... ] }
+ * Extracts GPU metrics for analysis and builds batches for trend charts.
  */
 
 const DEBUG = true
@@ -11,17 +12,45 @@ function log(...args) {
   if (DEBUG && typeof console !== 'undefined') console.log('[parseIngestion]', ...args)
 }
 
+/** OTLP NumberDataPoint value: protojson uses camelCase (asDouble, asInt). */
 function getDataPointValue(dp) {
   const v = dp.asDouble ?? dp.as_double ?? dp.asInt ?? dp.as_int
   if (v !== undefined && v !== null) return Number(v)
   return 0
 }
 
+/** OTLP attributes: key "gpu.id", value.stringValue (camelCase) or string_value. */
 function getGpuId(dp) {
   const attrs = dp.attributes || []
-  const gpu = attrs.find((a) => a.key === 'gpu.id')
+  const gpu = attrs.find((a) => a && a.key === 'gpu.id')
   const val = gpu?.value
-  return (val?.stringValue ?? val?.string_value) ?? 'global'
+  if (!val || typeof val !== 'object') return 'global'
+  return (val.stringValue ?? val.string_value ?? '').toString() || 'global'
+}
+
+/** Convert OTLP data (resourceMetrics -> scopeMetrics -> metrics -> gauge/sum -> dataPoints) into byName for batches and aggregation. */
+function dataToByName(data) {
+  const byName = {}
+  const rms = data?.resourceMetrics || data?.resource_metrics || []
+  for (const rm of rms) {
+    const sms = rm.scopeMetrics || rm.scope_metrics || []
+    for (const sm of sms) {
+      const ms = sm.metrics || []
+      for (const m of ms) {
+        const name = m.name
+        if (!name) continue
+        const gaugeOrSum = m.gauge || m.sum
+        const points = gaugeOrSum?.dataPoints || gaugeOrSum?.data_points || []
+        if (!byName[name]) byName[name] = []
+        for (const dp of points) {
+          const value = getDataPointValue(dp)
+          const gpuId = getGpuId(dp)
+          byName[name].push({ gpuId, value })
+        }
+      }
+    }
+  }
+  return byName
 }
 
 /** Collect from nested OTLP data (resourceMetrics/scopeMetrics/metrics). */
@@ -123,12 +152,12 @@ export function parseJSONL(text) {
 
 /**
  * From parsed entries, extract only metrics entries and aggregate for analysis.
- * Supports simple format (entry.metrics array) and legacy (entry.data.resourceMetrics).
+ * Supports: (1) OTLP lines with type "metrics" and data.resourceMetrics; (2) flat lines with entry.metrics array.
  */
 export function analyzeMetrics(entries) {
   const metricsEntries = []
   for (const e of entries) {
-    // Accept simple format: "metrics" array at top level or under "data"
+    // Flat format: "metrics" array at top level or under "data"
     let simpleMetrics = e.metrics ?? e.metric
     if (!Array.isArray(simpleMetrics) || simpleMetrics.length === 0) {
       let data = e.data
@@ -144,9 +173,10 @@ export function analyzeMetrics(entries) {
       }
     }
     if (Array.isArray(simpleMetrics) && simpleMetrics.length > 0) {
-      metricsEntries.push({ simple: true, metrics: simpleMetrics })
+      metricsEntries.push({ simple: true, metrics: simpleMetrics, received_at: e.received_at })
       continue
     }
+    // OTLP format: type "metrics" and data.resourceMetrics (valid OTel structure)
     if (e.type !== 'metrics') continue
     let data = e.data
     if (typeof data === 'string') {
@@ -159,7 +189,7 @@ export function analyzeMetrics(entries) {
     if (!data || typeof data !== 'object') continue
     const rms = data.resourceMetrics || data.resource_metrics
     if (!Array.isArray(rms) || rms.length === 0) continue
-    metricsEntries.push({ simple: false, data })
+    metricsEntries.push({ simple: false, data, received_at: e.received_at })
   }
 
   log('Metrics entries:', metricsEntries.length, metricsEntries.length ? (metricsEntries[0].simple ? 'simple' : 'nested') : '')
@@ -178,6 +208,15 @@ export function analyzeMetrics(entries) {
       gpuCount: 0,
       byGpu: {},
       sampleCount: { power: 0, util: 0, memUtil: 0, temp: 0 },
+      firstReceivedAt: null,
+      lastReceivedAt: null,
+      durationSeconds: 0,
+      costPerHour: 0,
+      energyPerHour: 0,
+      projected24hCost: 0,
+      projected24hEnergy: 0,
+      efficiencyClass: '',
+      batches: [],
     }
   }
 
@@ -189,6 +228,7 @@ export function analyzeMetrics(entries) {
   const gpuCost = {}
   let nvmlErrors = 0
   const gpuIds = new Set()
+  const batches = []
 
   for (const entry of metricsEntries) {
     if (entry.simple) {
@@ -213,6 +253,10 @@ export function analyzeMetrics(entries) {
       }
       const errList = byName['gpu.nvml.errors'] || []
       if (errList.length) nvmlErrors = Math.max(nvmlErrors, ...errList.map((p) => p.value))
+      batches.push({
+        received_at: entry.received_at,
+        byName,
+      })
       continue
     }
     const data = entry.data
@@ -229,6 +273,10 @@ export function analyzeMetrics(entries) {
     }
     const errPoints = collectDataPoints(data, 'gpu.nvml.errors')
     if (errPoints.length) nvmlErrors = Math.max(nvmlErrors, ...errPoints.map((p) => p.value))
+    batches.push({
+      received_at: entry.received_at,
+      byName: dataToByName(data),
+    })
   }
 
   log('Collected dataPoints - power:', allPower.length, 'util:', allUtil.length, 'memUtil:', allMemUtil.length, 'temp:', allTemp.length)
@@ -250,10 +298,33 @@ export function analyzeMetrics(entries) {
     }
   }
 
+  const receivedAts = metricsEntries.map((e) => e.received_at).filter(Boolean)
+  let firstReceivedAt = null
+  let lastReceivedAt = null
+  let durationSeconds = 0
+  if (receivedAts.length >= 1) {
+    firstReceivedAt = receivedAts[0]
+    lastReceivedAt = receivedAts[receivedAts.length - 1]
+    const first = new Date(firstReceivedAt).getTime()
+    const last = new Date(lastReceivedAt).getTime()
+    if (!Number.isNaN(first) && !Number.isNaN(last)) durationSeconds = Math.max(0, (last - first) / 1000)
+  }
+  const durationHours = durationSeconds / 3600
+  const costPerHour = durationHours > 0 ? totalCost / durationHours : 0
+  const energyPerHour = durationHours > 0 ? totalEnergyKwh / durationHours : 0
+  const projected24hCost = costPerHour * 24
+  const projected24hEnergy = energyPerHour * 24
+
+  const avgUtil = avg(allUtil)
+  let efficiencyClass = 'Moderate'
+  if (avgUtil < 40) efficiencyClass = 'Underutilized'
+  else if (avgUtil >= 40 && avgUtil <= 85) efficiencyClass = 'Efficient'
+  else if (avgUtil >= 90) efficiencyClass = 'Saturated'
+
   const result = {
     totalEnergyKwh,
     totalCost,
-    avgUtilization: avg(allUtil),
+    avgUtilization: avgUtil,
     avgMemoryUtil: avg(allMemUtil),
     avgPowerWatts: avg(allPower),
     maxTempC: max(allTemp),
@@ -267,6 +338,15 @@ export function analyzeMetrics(entries) {
       memUtil: allMemUtil.length,
       temp: allTemp.length,
     },
+    firstReceivedAt,
+    lastReceivedAt,
+    durationSeconds,
+    costPerHour,
+    energyPerHour,
+    projected24hCost,
+    projected24hEnergy,
+    efficiencyClass,
+    batches,
   }
   log('Analysis result:', result)
   return result

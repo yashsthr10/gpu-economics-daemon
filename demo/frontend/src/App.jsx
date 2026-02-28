@@ -42,7 +42,7 @@ function App() {
     <div className="app">
       <header className="app-header">
         <h1>GPU Economics — Ingestion Analysis</h1>
-        <p className="subtitle">Upload JSONL from the demo ingestion service (e.g. otel_ingestion.jsonl)</p>
+        <p className="subtitle">Upload OTLP or flat JSONL from the demo ingestion (e.g. otel_ingestion.jsonl)</p>
       </header>
 
       <FileUpload onFile={handleFile} fileName={fileName} />

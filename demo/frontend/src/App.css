@@ -65,6 +65,29 @@
   font-weight: 600;
 }
 
+.card-value-small {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.trend-charts {
+  margin-bottom: 2rem;
+}
+
+.chart-wrap {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+}
+
+.chart-title {
+  font-size: 0.9rem;
+  color: #8b949e;
+  margin: 0 0 0.5rem 0;
+}
+
 .card-unit {
   font-size: 0.85rem;
   color: #8b949e;

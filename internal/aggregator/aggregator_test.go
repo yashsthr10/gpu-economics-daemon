@@ -9,7 +9,7 @@ import (
 )
 
 func TestState_Update_and_Snapshot(t *testing.T) {
-	state := NewState()
+	state := NewState(10)
 
 	t0 := time.Now()
 	t1 := t0.Add(2 * time.Second) // delta_t = 2s
@@ -33,7 +33,7 @@ func TestState_Update_and_Snapshot(t *testing.T) {
 		GPUs:      []models.GPUSample{{GPUIndex: 0, PowerWatts: 50, PowerLimitW: 200}},
 	})
 
-	gauges, eKWhByGPU := state.Snapshot()
+	gauges, eKWhByGPU, _, _ := state.Snapshot()
 	if len(gauges) != 1 || gauges[0].GPUIndex != 0 {
 		t.Fatalf("expected one GPU in snapshot, got %v", gauges)
 	}
@@ -48,7 +48,7 @@ func TestState_Update_and_Snapshot(t *testing.T) {
 }
 
 func TestState_Update_GPU_disappear(t *testing.T) {
-	state := NewState()
+	state := NewState(10)
 	now := time.Now()
 	state.Update(models.NodeSample{
 		Timestamp: now,
@@ -57,7 +57,7 @@ func TestState_Update_GPU_disappear(t *testing.T) {
 			{GPUIndex: 1, PowerWatts: 80},
 		},
 	})
-	gauges, eKWh := state.Snapshot()
+	gauges, eKWh, _, _ := state.Snapshot()
 	if len(gauges) != 2 {
 		t.Fatalf("expected 2 GPUs, got %d", len(gauges))
 	}
@@ -67,7 +67,7 @@ func TestState_Update_GPU_disappear(t *testing.T) {
 		Timestamp: now.Add(time.Second),
 		GPUs:      []models.GPUSample{{GPUIndex: 0, PowerWatts: 90}},
 	})
-	gauges, eKWh = state.Snapshot()
+	gauges, eKWh, _, _ = state.Snapshot()
 	if len(gauges) != 1 || gauges[0].GPUIndex != 0 {
 		t.Errorf("expected one GPU after disappear, got %v", gauges)
 	}

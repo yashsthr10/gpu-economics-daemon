@@ -32,6 +32,8 @@ Instantaneous values per GPU; sampled at `collection_interval_seconds`.
 | `gpu.memory.utilization.percent` | Gauge | 1 | Memory utilization (0–100) | `gpu.id` |
 | `gpu.temperature.celsius` | Gauge | C | GPU temperature | `gpu.id` |
 | `gpu.power.limit.watts` | Gauge | W | Power limit (cap) | `gpu.id` |
+| `gpu.anomaly.suspicious_low_power` | Gauge | 1 | 1 if power &lt; 5W for a discrete GPU (sanity check) | `gpu.id` |
+| `gpu.anomaly.power_limit_zero` | Gauge | 1 | 1 if NVML reported power limit as 0 (possible anomaly) | `gpu.id` |
 
 **Attribute:**
 
@@ -43,10 +45,13 @@ Cumulative since agent start (or since last counter reset). Monotonic.
 
 | Metric Name | Type | Unit | Description | Attributes |
 |-------------|------|------|-------------|------------|
-| `gpu.energy.kwh.total` | Counter | kWh | Cumulative energy per GPU | `gpu.id` |
+| `gpu.energy.kwh.total` | Counter | kWh | Cumulative raw energy per GPU | `gpu.id` |
+| `gpu.energy.kwh.effective` | Counter | kWh | PUE-adjusted energy (E_kWh * PUE) per GPU | `gpu.id` |
+| `gpu.energy.kwh.idle` | Counter | kWh | Energy when utilization &lt; threshold (idle) | `gpu.id` |
+| `gpu.energy.kwh.active` | Counter | kWh | Energy when utilization >= threshold (active) | `gpu.id` |
 | `gpu.cost.total` | Counter | (currency) | Cumulative cost per GPU | `gpu.id` |
 
-Currency is implied by configuration (e.g., USD); no currency dimension in v1.
+Currency is implied by configuration (e.g., USD); no currency dimension in v1. Energy and cost are **cumulative monotonic counters**; power and utilization are **gauges**. Never mix types.
 
 ### 2.3 Optional Histogram
 
@@ -68,11 +73,23 @@ Increment once per error event; no high-cardinality labels.
 
 | Metric Name | Type | Unit | Description |
 |-------------|------|------|-------------|
+| `agent.restart.count` | Counter | 1 | One per process start; backends can detect counter resets |
 | `agent.cpu.usage` | Gauge | 1 (ratio or percent) | Agent process CPU usage |
 | `agent.memory.usage` | Gauge | By | Agent process memory (e.g., RSS) |
 | `agent.export.errors` | Counter | 1 | OTLP export failures |
-| `agent.poll.duration` | Histogram or Gauge | s | Duration of one poll cycle |
+| `agent.poll.duration` | Gauge | s | Last poll cycle duration |
+| `agent.export.duration` | Gauge | s | Last export flush duration (if available) |
+| `agent.integration.jitter` | Gauge | s | \|actual_interval - expected_interval\| for integration |
 | `agent.queue.size` | Gauge | 1 | In-memory retry queue size (if applicable) |
+| `nvml.read.latency` | Gauge | s | Last NVML ReadSnapshot duration |
+| `nvml.failure.rate` | Gauge | 1 | Failures / (failures + successes) over polls |
+
+---
+
+## 2.6 Data formats (demo pipeline)
+
+- **Production:** Connect to the agent via OTLP gRPC; metric types and semantics follow OTLP. All metrics above are emitted as standard OTLP instruments (gauges or cumulative counters).
+- **Demo ingestion:** Can write **flat JSONL** (default) or **OTLP-shaped JSONL**. Flat schema: one line per batch with `metrics: [ { "name", "gpu_id", "value", "unit" }, ... ]`. Frontend accepts both flat and OTLP-shaped JSONL for the same analysis.
 
 ---
 
